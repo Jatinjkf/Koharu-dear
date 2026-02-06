@@ -51,14 +51,17 @@ async function generateDashboardEmbed(client, userId) {
 
     const grouped = {};
     items.forEach(item => {
-        if (!grouped[item.frequencyName]) grouped[item.frequencyName] = [];
-        grouped[item.frequencyName].push(item);
+        if (!grouped[item.frequencyName]) {
+            grouped[item.frequencyName] = { name: item.frequencyName, duration: item.frequencyDuration, items: [] };
+        }
+        grouped[item.frequencyName].items.push(item);
     });
 
-    for (const [freq, groupItems] of Object.entries(grouped)) {
-        // Clean list: Bullet, Name, ID only.
-        const list = groupItems.map(i => `❀ **${i.name}** \`[#${i.activeSeq}]\``).join('\n');
-        const partitionName = `─── 🌸 ✧ ${freq.toUpperCase()} ✧ 🌸 ───`;
+    const sortedCategories = Object.values(grouped).sort((a, b) => a.duration - b.duration);
+
+    for (const cat of sortedCategories) {
+        const list = cat.items.map(i => `❀ **${i.name}** \`[#${i.activeSeq}]\``).join('\n');
+        const partitionName = `─── 🌸 ✧ ${cat.name.toUpperCase()} ✧ 🌸 ───`;
         embed.addFields({ name: partitionName, value: list + '\n\u200b' });
     }
 
@@ -66,16 +69,26 @@ async function generateDashboardEmbed(client, userId) {
 }
 
 async function updateDashboard(client, userId) {
+    // Small delay to let DB settle (Extended for Master's convenience)
+    await new Promise(r => setTimeout(r, 2000));
+
     try {
         let userConfig = await UserConfig.findOne({ userId });
         if (!userConfig) userConfig = await UserConfig.create({ userId });
 
         const Config = require('../models/Config');
         const config = await Config.findOne();
-        if (!config || !config.quickAddChannelId) return;
+        if (!config || !config.quickAddChannelId) {
+            console.warn("[Dashboard] No quickAddChannelId found in config.");
+            return;
+        }
 
-        const channel = client.channels.cache.get(config.quickAddChannelId);
-        if (!channel) return;
+        // FORCE FETCH CHANNEL (Crucial for cloud)
+        const channel = await client.channels.fetch(config.quickAddChannelId).catch(() => null);
+        if (!channel) {
+            console.warn(`[Dashboard] Could not fetch channel ${config.quickAddChannelId}`);
+            return;
+        }
 
         const embed = await generateDashboardEmbed(client, userId);
         const channelChanged = userConfig.lastDashboardChannelId !== config.quickAddChannelId;
@@ -87,8 +100,11 @@ async function updateDashboard(client, userId) {
                 if (lastMsg) {
                     await lastMsg.edit({ content: `📜 **${userConfig.preferredName || 'Master'}'s Living Journal**`, embeds: [embed] });
                     messageFound = true;
+                    console.log(`[Dashboard] Updated existing message for ${userId}`);
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.log(`[Dashboard] Old message not found, will send new one.`);
+            }
         }
 
         if (!messageFound) {
@@ -96,9 +112,10 @@ async function updateDashboard(client, userId) {
             userConfig.lastDashboardMessageId = newMsg.id;
             userConfig.lastDashboardChannelId = config.quickAddChannelId;
             await userConfig.save();
+            console.log(`[Dashboard] Sent new message for ${userId}`);
         }
 
-    } catch (err) { console.error("[Dashboard Update] Error:", err); }
+    } catch (err) { console.error("[Dashboard Update Error]:", err); }
 }
 
 module.exports = { generateDashboardEmbed, updateDashboard, getFreshImageUrl };
