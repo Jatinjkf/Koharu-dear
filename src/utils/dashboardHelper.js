@@ -69,6 +69,9 @@ async function generateDashboardEmbed(client, userId) {
 }
 
 async function updateDashboard(client, userId) {
+    // Graceful pause to ensure database has finished previous operations (add/remove)
+    await new Promise(r => setTimeout(r, 500));
+
     try {
         let userConfig = await UserConfig.findOne({ userId });
         if (!userConfig) userConfig = await UserConfig.create({ userId });
