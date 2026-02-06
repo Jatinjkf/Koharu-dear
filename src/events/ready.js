@@ -1,8 +1,10 @@
 const { REST, Routes } = require('discord.js');
 const Config = require('../models/Config');
 const Frequency = require('../models/Frequency');
+const Item = require('../models/Item');
 const ai = require('../utils/ai');
 const scheduler = require('../utils/scheduler');
+const { getFutureMidnightIST } = require('../utils/timeHelper');
 
 module.exports = {
     name: 'clientReady',
@@ -14,7 +16,7 @@ module.exports = {
 
         client.user.setActivity('over the Mansion', { type: 3 });
 
-        // 1. Initialize DB protocols
+        // 1. Mansion Protocols & Time Alignment
         try {
             let config = await Config.findOne();
             if (!config) {
@@ -31,41 +33,44 @@ module.exports = {
                 ]);
                 console.log('[Database] Default study rhythms memorized.');
             }
+
+            // --- NEW: TIME ALIGNMENT PROTOCOL ---
+            // Find all active items and ensure they are snapped to exactly 00:00 IST
+            const items = await Item.find({ isArchived: false });
+            let fixCount = 0;
+            for (const item of items) {
+                const correctTime = getFutureMidnightIST(0); // Snap to Today's Midnight
+                // If it's already due, snap it to Today's Midnight so it triggers NOW
+                if (item.nextReminder.getHours() !== 0 || item.nextReminder.getMinutes() !== 0) {
+                    item.nextReminder = getFutureMidnightIST(0);
+                    await item.save();
+                    fixCount++;
+                }
+            }
+            if (fixCount > 0) console.log(`[System] Recalibrated ${fixCount} items to Midnight IST.`);
+
         } catch (e) { console.error("[Database] Init error:", e.message); }
 
         // 2. Start Scheduler
         await scheduler.start(client);
 
-        // 3. THE CLEANUP: Wiping ghost commands
+        // 3. Command Cleanup
         const commands = [];
         client.commands.forEach(cmd => commands.push(cmd.data.toJSON()));
         const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
         (async () => {
             try {
-                console.log('[System] Wiping ghost protocols (cleaning duplicate commands)...');
-                
-                // A. Wipe GLOBAL
                 await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: [] });
-                
-                // B. Wipe & Register GUILD (If ID provided)
                 if (process.env.GUILD_ID) {
-                    await rest.put(
-                        Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
-                        { body: commands }
-                    );
-                    console.log('[System] Duplicates erased. Mansion-only commands active.');
+                    await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commands });
                 } else {
-                    // Fallback to Global if no guild ID
                     await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
-                    console.log('[System] Duplicates erased. Global commands active.');
                 }
-            } catch (error) {
-                console.error('[System] Cleanup failed:', error.message);
-            }
+            } catch (error) { console.error('[System] Sync failed:', error.message); }
         })();
 
-        // 4. Dynamic Status
+        // 4. Status Loop
         const updateStatus = async () => {
              try {
                  const conf = await Config.findOne();
@@ -77,7 +82,7 @@ module.exports = {
         updateStatus();
         setInterval(updateStatus, 3 * 60 * 60 * 1000); 
 
-        // 5. Initial Check
+        // 5. Morning Rounds (Check for missed tasks immediately)
         setTimeout(() => {
             scheduler.checkNow(client);
         }, 15000);
