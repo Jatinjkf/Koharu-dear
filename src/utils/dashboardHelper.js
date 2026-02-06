@@ -28,7 +28,6 @@ async function getFreshImageUrl(client, item) {
 }
 
 async function generateDashboardEmbed(client, userId) {
-    // Protocol: Only filter by userId, as there is only one Mansion
     const items = await Item.find({ userId, isArchived: false }).sort({ activeSeq: 1 });
     const userConfig = await UserConfig.findOne({ userId });
     const displayName = userConfig ? userConfig.preferredName : null;
@@ -57,10 +56,8 @@ async function generateDashboardEmbed(client, userId) {
     });
 
     for (const [freq, groupItems] of Object.entries(grouped)) {
-        const list = groupItems.map(i => {
-            const time = Math.floor(i.nextReminder.getTime() / 1000);
-            return `❀ **${i.name}** \`[#${i.activeSeq}]\`\n└ *Next: <t:${time}:R>*`;
-        }).join('\n');
+        // Clean list: Bullet, Name, ID only.
+        const list = groupItems.map(i => `❀ **${i.name}** \`[#${i.activeSeq}]\``).join('\n');
         const partitionName = `─── 🌸 ✧ ${freq.toUpperCase()} ✧ 🌸 ───`;
         embed.addFields({ name: partitionName, value: list + '\n\u200b' });
     }
@@ -69,8 +66,7 @@ async function generateDashboardEmbed(client, userId) {
 }
 
 async function updateDashboard(client, userId) {
-    // Graceful pause to ensure database has finished previous operations (add/remove)
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 500)); // Housekeeping pause
 
     try {
         let userConfig = await UserConfig.findOne({ userId });
