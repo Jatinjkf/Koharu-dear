@@ -3,7 +3,7 @@ const Item = require('../models/Item');
 const Frequency = require('../models/Frequency');
 const UserConfig = require('../models/UserConfig');
 const { updateDashboard } = require('../utils/dashboardHelper');
-const { getMidnightIST } = require('../utils/timeHelper');
+const { getFutureMidnightIST } = require('../utils/timeHelper');
 const ai = require('../utils/ai');
 
 module.exports = {
@@ -41,7 +41,10 @@ module.exports = {
 
         item.frequencyName = frequency.name;
         item.frequencyDuration = frequency.duration;
-        item.nextReminder = getMidnightIST(Date.now() + frequency.duration);
+        
+        // FIX: Use the correct function name
+        const days = Math.round(frequency.duration / 86400000);
+        item.nextReminder = getFutureMidnightIST(days);
         item.awaitingReview = false; 
         
         await item.save();

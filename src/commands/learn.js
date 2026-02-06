@@ -4,7 +4,7 @@ const Frequency = require('../models/Frequency');
 const UserConfig = require('../models/UserConfig');
 const Config = require('../models/Config');
 const { updateDashboard } = require('../utils/dashboardHelper');
-const { getMidnightIST } = require('../utils/timeHelper');
+const { getFutureMidnightIST } = require('../utils/timeHelper');
 const ai = require('../utils/ai');
 
 module.exports = {
@@ -61,7 +61,6 @@ module.exports = {
         const sub = interaction.options.getSubcommand();
         const userId = interaction.user.id;
 
-        // CRITICAL: Always defer to prevent interaction timeout
         await interaction.deferReply({ ephemeral: (sub !== 'add') });
 
         const userConf = await UserConfig.findOne({ userId });
@@ -83,9 +82,12 @@ module.exports = {
             const lastActive = await Item.findOne({ userId, isArchived: false }).sort({ activeSeq: -1 });
             const nextActive = lastActive ? lastActive.activeSeq + 1 : 1;
 
+            const days = Math.round(freq.duration / 86400000);
+            const nextDate = getFutureMidnightIST(days);
+
             const newItem = new Item({
                 userId, name, imageUrl: sentMsg.attachments.first().url, storageMessageId: sentMsg.id, storageChannelId: storageChannel.id,
-                frequencyName: freq.name, frequencyDuration: freq.duration, nextReminder: getMidnightIST(Date.now() + freq.duration), activeSeq: nextActive
+                frequencyName: freq.name, frequencyDuration: freq.duration, nextReminder: nextDate, activeSeq: nextActive
             });
 
             await newItem.save();
@@ -101,7 +103,6 @@ module.exports = {
 
             if (!item) return interaction.editReply({ content: 'I could not find that item in my records.' });
             
-            const oldName = item.name;
             item.name = newName;
             await item.save();
 

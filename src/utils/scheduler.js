@@ -10,33 +10,33 @@ const { getISTDate } = require('./timeHelper');
 let scheduledTask = null;
 
 async function checkReminders(client) {
-    const istNow = getISTDate();
-    console.log(`[Scheduler] Checking IST: ${istNow.toFormat('yyyy-MM-dd HH:mm:ss')}`);
-    
     try {
+        const istNow = getISTDate();
         const nowMS = istNow.toMillis();
         
-        // Anti-Deadlock
+        // Reset missed items silently
         const yesterdayMS = nowMS - (24 * 60 * 60 * 1000);
         await Item.updateMany({ awaitingReview: true, nextReminder: { $lte: new Date(yesterdayMS) } }, { awaitingReview: false });
 
-        // Find items due ON or BEFORE now
-        const dueItems = await Item.find({ nextReminder: { $lte: new Date(nowMS) }, isArchived: false, awaitingReview: false });
-        if (dueItems.length === 0) {
-            console.log("[Scheduler] No items due for this cycle.");
-            return;
-        }
+        const dueItems = await Item.find({ 
+            nextReminder: { $lte: new Date(nowMS) }, 
+            isArchived: false, 
+            awaitingReview: false 
+        });
+
+        if (dueItems.length === 0) return;
+
+        const config = await Config.findOne();
+        if (!config || !config.quickAddChannelId) return;
+
+        const channel = await client.channels.fetch(config.quickAddChannelId).catch(() => null);
+        if (!channel) return;
 
         const userItems = {};
         for (const item of dueItems) {
             if (!userItems[item.userId]) userItems[item.userId] = [];
             userItems[item.userId].push(item);
         }
-
-        const config = await Config.findOne();
-        if (!config || !config.quickAddChannelId) return;
-        const channel = client.channels.cache.get(config.quickAddChannelId);
-        if (!channel) return;
 
         const botName = config.botName || 'Koharu';
 
@@ -70,22 +70,18 @@ async function checkReminders(client) {
 
                 for (const item of chunk) {
                     item.awaitingReview = true;
-                    item.lastReminderMessageId = null; // Reset for tray logic if needed
                     await item.save();
                 }
                 await new Promise(r => setTimeout(r, 2000));
             }
         }
-    } catch (err) { console.error('[Scheduler Error]:', err); }
+    } catch (err) { /* Silent fail to maintain elegance */ }
 }
 
 async function startScheduler(client) {
     if (scheduledTask) scheduledTask.stop();
-    
-    // STRICT PROTOCOL: Always Midnight IST
-    const cronTime = '0 0 * * *';
-    console.log(`[Scheduler] Eternal Midnight Protocol active ("${cronTime}" IST)`);
-    scheduledTask = cron.schedule(cronTime, () => checkReminders(client), { timezone: "Asia/Kolkata" });
+    // Midnight IST
+    scheduledTask = cron.schedule('0 0 * * *', () => checkReminders(client), { timezone: "Asia/Kolkata" });
 }
 
 module.exports = { start: startScheduler, reschedule: startScheduler, checkNow: checkReminders };
