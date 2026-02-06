@@ -45,7 +45,6 @@ module.exports = {
             const lastItem = await Item.findOne({ userId, isArchived: false }).sort({ activeSeq: -1 });
             const nextSeq = lastItem ? lastItem.activeSeq + 1 : 1;
             
-            // Fix: Use correct helper function and logic
             const days = Math.round(freq.duration / 86400000);
             const nextDate = getFutureMidnightIST(days);
 
@@ -53,7 +52,6 @@ module.exports = {
 
             const newItem = new Item({
                 userId,
-                guildId: message.guild.id,
                 name: itemName,
                 imageUrl: sentMsg.attachments.first().url,
                 storageMessageId: sentMsg.id,
@@ -66,7 +64,7 @@ module.exports = {
             await newItem.save();
 
             const reply = await message.reply(`✅ Saved "**${itemName}**" to your ${freq.name} list, ${masterName}.`);
-            await updateDashboard(message.client, message.guild.id, userId);
+            await updateDashboard(message.client, userId);
 
             setTimeout(() => {
                 message.delete().catch(() => {});

@@ -49,7 +49,11 @@ module.exports = {
             if (sub !== 'rename') query.isArchived = false;
 
             const items = await Item.find(query).sort({ isArchived: 1, activeSeq: 1, archiveSeq: 1 });
-            const filtered = items.filter(i => i.name.toLowerCase().includes(focused.value.toLowerCase()) || (i.activeSeq && String(i.activeSeq).includes(focused.value)) || (i.archiveSeq && String(i.archiveSeq).includes(focused.value)));
+            const filtered = items.filter(i => 
+                i.name.toLowerCase().includes(focused.value.toLowerCase()) || 
+                (i.activeSeq && String(i.activeSeq).includes(focused.value)) || 
+                (i.archiveSeq && String(i.archiveSeq).includes(focused.value))
+            );
             
             await interaction.respond(filtered.map(i => {
                 const label = i.isArchived ? `📦 [Archive #${i.archiveSeq || 'Old'}] ${i.name}` : `📖 [#${i.activeSeq || 'Old'}] ${i.name}`;
@@ -60,8 +64,10 @@ module.exports = {
     async execute(interaction) {
         const sub = interaction.options.getSubcommand();
         const userId = interaction.user.id;
+        const guildId = interaction.guild.id;
 
-        await interaction.deferReply({ ephemeral: (sub !== 'add') });
+        // Protocol: All command confirmations are now persistent (ephemeral: false)
+        await interaction.deferReply({ ephemeral: false });
 
         const userConf = await UserConfig.findOne({ userId });
         const masterName = userConf ? userConf.preferredName : null;
@@ -69,14 +75,11 @@ module.exports = {
         if (sub === 'add') {
             const name = interaction.options.getString('name');
             const image = interaction.options.getAttachment('image');
-            
-            let freq = await Frequency.findOne({ name: interaction.options.getString('frequency') }) 
-                       || await Frequency.findOne({ isDefault: true }) 
-                       || { name: 'Daily', duration: 86400000 };
+            let freq = await Frequency.findOne({ name: interaction.options.getString('frequency') }) || await Frequency.findOne({ isDefault: true }) || { name: 'Daily', duration: 86400000 };
 
             const config = await Config.findOne();
             const storageChannel = interaction.client.channels.cache.get(config?.storageChannelId);
-            if (!storageChannel) return interaction.editReply('Master, the storage room is not set up. Please visit the Admin Panel.');
+            if (!storageChannel) return interaction.editReply('Master, the storage room is not set up.');
 
             const sentMsg = await storageChannel.send({ content: `Drop: ${interaction.user.tag}`, files: [image.url] });
             const lastActive = await Item.findOne({ userId, isArchived: false }).sort({ activeSeq: -1 });
@@ -86,12 +89,12 @@ module.exports = {
             const nextDate = getFutureMidnightIST(days);
 
             const newItem = new Item({
-                userId, name, imageUrl: sentMsg.attachments.first().url, storageMessageId: sentMsg.id, storageChannelId: storageChannel.id,
+                userId, guildId, name, imageUrl: sentMsg.attachments.first().url, storageMessageId: sentMsg.id, storageChannelId: storageChannel.id,
                 frequencyName: freq.name, frequencyDuration: freq.duration, nextReminder: nextDate, activeSeq: nextActive
             });
 
             await newItem.save();
-            await updateDashboard(interaction.client, interaction.guild.id, userId);
+            await updateDashboard(interaction.client, guildId, userId);
             return interaction.editReply({ content: ai.getAddMessage(name, masterName) });
         }
 
@@ -106,8 +109,7 @@ module.exports = {
             item.name = newName;
             await item.save();
 
-            const loc = item.isArchived ? "in your archives" : "on your dashboard";
-            await updateDashboard(interaction.client, interaction.guild.id, userId);
+            await updateDashboard(interaction.client, guildId, userId);
             return interaction.editReply({ content: ai.getRenameMessage(newName, masterName) });
         }
 
@@ -127,7 +129,7 @@ module.exports = {
                 await item.save();
                 await interaction.editReply({ content: ai.getArchiveMessage(item.name, masterName) });
             }
-            await updateDashboard(interaction.client, interaction.guild.id, userId);
+            await updateDashboard(interaction.client, guildId, userId);
         }
     }
 };

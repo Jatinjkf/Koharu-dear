@@ -15,7 +15,7 @@ module.exports = {
     async autocomplete(interaction) {
         const focused = interaction.options.getFocused(true);
         if (focused.name === 'item') {
-            const items = await Item.find({ userId: interaction.user.id, guildId: interaction.guild.id, isArchived: true }).sort({ archiveSeq: 1 });
+            const items = await Item.find({ userId: interaction.user.id, isArchived: true }).sort({ archiveSeq: 1 });
             const filtered = items.filter(i => 
                 i.name.toLowerCase().includes(focused.value.toLowerCase()) || 
                 (i.archiveSeq && String(i.archiveSeq).includes(focused.value))
@@ -28,13 +28,14 @@ module.exports = {
         const userId = interaction.user.id;
         const guildId = interaction.guild.id;
 
-        await interaction.deferReply({ ephemeral: true });
+        // NEW PROTOCOL: Archive List is now persistent (ephemeral: false)
+        await interaction.deferReply({ ephemeral: (sub === 'send-all') }); 
 
         const userConf = await UserConfig.findOne({ userId });
         const masterName = userConf ? userConf.preferredName : null;
 
         if (sub === 'list') {
-            const items = await Item.find({ userId, guildId, isArchived: true }).sort({ archiveSeq: 1 });
+            const items = await Item.find({ userId, isArchived: true }).sort({ archiveSeq: 1 });
             if (items.length === 0) return interaction.editReply({ content: 'The archive room is empty, Master.' });
             const list = items.map(i => `**#${i.archiveSeq || 'Old'}** - ${i.name}`).join('\n');
             const embed = new EmbedBuilder().setColor(0x808080).setTitle('🗄️ Archives').setDescription(list);
@@ -43,17 +44,16 @@ module.exports = {
 
         if (sub === 'revive') {
             const id = interaction.options.getString('item');
-            let item = await Item.findById(id) || await Item.findOne({ userId, guildId, archiveSeq: parseInt(id), isArchived: true });
+            let item = await Item.findById(id) || await Item.findOne({ userId, archiveSeq: parseInt(id), isArchived: true });
             if (!item) return interaction.editReply({ content: 'I cannot find that archive, Master.' });
 
             item.isArchived = false;
             item.archiveSeq = null; 
             item.awaitingReview = false;
-            
             const days = Math.round(item.frequencyDuration / 86400000);
             item.nextReminder = getFutureMidnightIST(days);
 
-            const lastActive = await Item.findOne({ userId, guildId, isArchived: false }).sort({ activeSeq: -1 });
+            const lastActive = await Item.findOne({ userId, isArchived: false }).sort({ activeSeq: -1 });
             item.activeSeq = lastActive ? lastActive.activeSeq + 1 : 1;
             await item.save();
 
@@ -62,7 +62,7 @@ module.exports = {
         }
 
         if (sub === 'send-all') {
-            const items = await Item.find({ userId, guildId, isArchived: true }).sort({ archiveSeq: 1 });
+            const items = await Item.find({ userId, isArchived: true }).sort({ archiveSeq: 1 });
             if (items.length === 0) return interaction.editReply('Archive is empty.');
             
             await interaction.editReply(`Refreshing and sending ${items.length} items to your DM...`);

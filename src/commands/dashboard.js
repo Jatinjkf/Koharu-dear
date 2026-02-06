@@ -8,8 +8,7 @@ module.exports = {
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: false });
         
-        // Pass GuildID so Koharu knows which mansion's rhythms to show
-        const embed = await generateDashboardEmbed(interaction.client, interaction.user.id, interaction.guild.id);
+        const embed = await generateDashboardEmbed(interaction.client, interaction.user.id);
         
         await interaction.editReply({ embeds: [embed] });
     }
