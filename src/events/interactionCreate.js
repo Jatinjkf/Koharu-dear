@@ -3,7 +3,7 @@ const Item = require('../models/Item');
 const UserConfig = require('../models/UserConfig');
 const Config = require('../models/Config');
 const ai = require('../utils/ai');
-const { getMidnightIST } = require('../utils/timeHelper');
+const { getFutureMidnightIST } = require('../utils/timeHelper');
 
 module.exports = {
     name: 'interactionCreate',
@@ -37,23 +37,21 @@ module.exports = {
                         return interaction.reply({ content: "My apologies, but these notes are for another Master's eyes only. 🙇‍♀️", ephemeral: true });
                     }
 
-                    // Acknowledge immediately to prevent 10062 error
                     await interaction.deferReply({ ephemeral: false });
 
-                    const items = await Item.find({ 
-                        userId: interaction.user.id, 
-                        isArchived: false, 
-                        awaitingReview: true,
-                        lastReminderMessageId: interaction.message.id 
-                    });
+                    // Find all items for this user currently waiting
+                    const items = await Item.find({ userId: interaction.user.id, isArchived: false, awaitingReview: true });
 
                     if (items.length === 0) {
-                        return interaction.editReply({ content: "Master, these items have already been processed for today. 🌸" });
+                        return interaction.editReply({ content: "Master, these items have already been processed. 🌸" });
                     }
 
                     const completedNames = [];
                     for (const item of items) {
-                        const nextDate = getMidnightIST(Date.now() + item.frequencyDuration);
+                        // Protocol: Always use Day-based math for next Midnight IST
+                        const days = Math.round(item.frequencyDuration / 86400000);
+                        const nextDate = getFutureMidnightIST(days);
+                        
                         item.nextReminder = nextDate;
                         item.awaitingReview = false;
                         item.lastReminderMessageId = null;

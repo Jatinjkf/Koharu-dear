@@ -1,19 +1,25 @@
+const { DateTime } = require('luxon');
+
 /**
- * Handles IST Timezone math correctly for Koharu
+ * Returns current time in Asia/Kolkata
  */
 function getISTDate() {
-    return new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+    return DateTime.now().setZone('Asia/Kolkata');
 }
 
-function getMidnightIST(baseDate = null) {
-    const date = baseDate ? new Date(baseDate) : getISTDate();
-    date.setHours(0, 0, 0, 0);
-    return date;
+/**
+ * Returns Midnight of a future day in IST.
+ * @param {number} daysToAdd Number of days to add from today.
+ */
+function getFutureMidnightIST(daysToAdd = 0) {
+    // 1. Get today in IST
+    let dt = DateTime.now().setZone('Asia/Kolkata');
+    
+    // 2. Add days
+    dt = dt.plus({ days: daysToAdd });
+    
+    // 3. Snap to 00:00:00
+    return dt.startOf('day').toJSDate();
 }
 
-// Convert MS to Days (rounded)
-function msToDays(ms) {
-    return Math.round(ms / (24 * 60 * 60 * 1000));
-}
-
-module.exports = { getISTDate, getMidnightIST, msToDays };
+module.exports = { getISTDate, getFutureMidnightIST };

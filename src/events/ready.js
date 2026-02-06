@@ -12,19 +12,16 @@ module.exports = {
         console.log(`🌸 [SUCCESS] ${client.user.tag} HAS AWAKENED!`);
         console.log("---------------------------------------");
 
-        // 1. Initial status
-        client.user.setActivity('over the Mansion', { type: 3 }); // Type 3 = Watching
+        client.user.setActivity('over the Mansion', { type: 3 });
 
-        // 2. Initialize protocols
+        // 1. Initialize DB protocols
         try {
-            // Default Config
             let config = await Config.findOne();
             if (!config) {
-                config = await Config.create({ guildId: 'GLOBAL' }); // Primary config
-                console.log('[Database] Primary protocols established.');
+                config = await Config.create({ botName: 'Koharu' });
+                console.log('[Database] Protocols established.');
             }
 
-            // Default Rhythms
             const freqCount = await Frequency.countDocuments();
             if (freqCount === 0) {
                 const day = 24 * 3600000;
@@ -34,41 +31,41 @@ module.exports = {
                 ]);
                 console.log('[Database] Default study rhythms memorized.');
             }
-        } catch (e) { console.error("[Database] Initialization failed:", e.message); }
+        } catch (e) { console.error("[Database] Init error:", e.message); }
 
-        // 3. Start Scheduler
-        try {
-            await scheduler.start(client);
-        } catch (e) { console.error("[Scheduler] Start failed:", e.message); }
+        // 2. Start Scheduler
+        await scheduler.start(client);
 
-        // 4. Synchronize Commands
-        // We only register commands once to avoid 'Multiple Commands' issue.
+        // 3. THE CLEANUP: Wiping ghost commands
         const commands = [];
         client.commands.forEach(cmd => commands.push(cmd.data.toJSON()));
         const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
-        try {
-            console.log('[System] Verifying command protocols...');
-            // Registering GLOBAL commands (Instant update for new installs, but takes time to propagate to existing servers)
-            // If you only have one server, using guild commands is faster.
-            if (process.env.GUILD_ID) {
-                await rest.put(
-                    Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
-                    { body: commands },
-                );
-                console.log('[System] Mansion-specific commands synchronized.');
-            } else {
-                await rest.put(
-                    Routes.applicationCommands(process.env.CLIENT_ID),
-                    { body: commands },
-                );
-                console.log('[System] Global commands synchronized.');
+        (async () => {
+            try {
+                console.log('[System] Wiping ghost protocols (cleaning duplicate commands)...');
+                
+                // A. Wipe GLOBAL
+                await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: [] });
+                
+                // B. Wipe & Register GUILD (If ID provided)
+                if (process.env.GUILD_ID) {
+                    await rest.put(
+                        Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+                        { body: commands }
+                    );
+                    console.log('[System] Duplicates erased. Mansion-only commands active.');
+                } else {
+                    // Fallback to Global if no guild ID
+                    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
+                    console.log('[System] Duplicates erased. Global commands active.');
+                }
+            } catch (error) {
+                console.error('[System] Cleanup failed:', error.message);
             }
-        } catch (error) {
-            console.error('[System] Sync failed:', error.message);
-        }
+        })();
 
-        // 5. Dynamic Status Loop
+        // 4. Dynamic Status
         const updateStatus = async () => {
              try {
                  const conf = await Config.findOne();
@@ -80,7 +77,7 @@ module.exports = {
         updateStatus();
         setInterval(updateStatus, 3 * 60 * 60 * 1000); 
 
-        // 6. Morning Rounds (Check for missed tasks)
+        // 5. Initial Check
         setTimeout(() => {
             scheduler.checkNow(client);
         }, 15000);
