@@ -98,14 +98,14 @@ const TEXTS = {
     ],
     rename: [
         "I have updated the name in my register, Master. 🙇‍♀️📝",
-        "Master, the item is now known as "**{ITEM}**". ✨🏰",
+        "Master, the item is now known as **{ITEM}**. ✨🏰",
         "Renamed per your instruction, Master. 🎀📜",
         "I have corrected the ledger, Master. 🌸🙇‍♀️",
         "New name applied, Master. My memory is updated. 🏰✨",
-        "Master, I have renamed the item to "**{ITEM}**". 🙇‍♀️🌸",
+        "Master, I have renamed the item to **{ITEM}**. 🙇‍♀️🌸",
         "Updated the item's identity, Master. 🎀✨",
         "I have rewritten the label for you, Master. 🌸📜",
-        "As you wish, it is now titled "**{ITEM}**", Master. 🙇‍♀️🏰",
+        "As you wish, it is now titled **{ITEM}**, Master. 🙇‍♀️🏰",
         "Master, the name has been changed in your records. ✨🎀"
     ],
     status: [
@@ -129,8 +129,6 @@ class KoharuAI {
         const list = TEXTS[key];
         let text = list[Math.floor(Math.random() * list.length)];
         
-        // Logic: Use "Master [Name]" if name is provided, else just "Master"
-        // Also handle pronouns intelligently by replacing '{NAME}'
         const title = name ? `Master ${name}` : "Master";
         text = text.replace(/{NAME}/g, title);
         
