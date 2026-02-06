@@ -26,7 +26,7 @@ module.exports = {
         }
     },
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ ephemeral: false });
         const itemIdOrName = interaction.options.getString('item');
         const freqName = interaction.options.getString('to');
 
@@ -41,15 +41,13 @@ module.exports = {
 
         item.frequencyName = frequency.name;
         item.frequencyDuration = frequency.duration;
-        
-        // FIX: Use the correct function name
-        const days = Math.round(frequency.duration / 86400000);
-        item.nextReminder = getFutureMidnightIST(days);
+        item.nextReminder = getFutureMidnightIST(Math.round(frequency.duration / 86400000));
         item.awaitingReview = false; 
         
         await item.save();
-        await updateDashboard(interaction.client, interaction.guild.id, interaction.user.id);
+        await updateDashboard(interaction.client, interaction.user.id);
 
-        return interaction.editReply({ content: ai.getMoveMessage(freqName, masterName) });
+        const reply = await interaction.editReply({ content: ai.getMoveMessage(freqName, masterName) });
+        setTimeout(() => reply.delete().catch(() => {}), 60000); // 1 Minute
     }
 };

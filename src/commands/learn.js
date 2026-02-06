@@ -37,24 +37,16 @@ module.exports = {
     async autocomplete(interaction) {
         const focused = interaction.options.getFocused(true);
         const sub = interaction.options.getSubcommand();
-
         if (focused.name === 'frequency') {
             const freqs = await Frequency.find();
             const filtered = freqs.filter(f => f.name.toLowerCase().includes(focused.value.toLowerCase()));
             await interaction.respond(filtered.map(f => ({ name: f.name, value: f.name })).slice(0, 25));
         }
-
         if (focused.name === 'item') {
             const query = { userId: interaction.user.id };
             if (sub !== 'rename') query.isArchived = false;
-
             const items = await Item.find(query).sort({ isArchived: 1, activeSeq: 1, archiveSeq: 1 });
-            const filtered = items.filter(i => 
-                i.name.toLowerCase().includes(focused.value.toLowerCase()) || 
-                (i.activeSeq && String(i.activeSeq).includes(focused.value)) || 
-                (i.archiveSeq && String(i.archiveSeq).includes(focused.value))
-            );
-            
+            const filtered = items.filter(i => i.name.toLowerCase().includes(focused.value.toLowerCase()) || (i.activeSeq && String(i.activeSeq).includes(focused.value)) || (i.archiveSeq && String(i.archiveSeq).includes(focused.value)));
             await interaction.respond(filtered.map(i => {
                 const label = i.isArchived ? `📦 [Archive #${i.archiveSeq || 'Old'}] ${i.name}` : `📖 [#${i.activeSeq || 'Old'}] ${i.name}`;
                 return { name: label, value: i._id.toString() };
@@ -64,9 +56,6 @@ module.exports = {
     async execute(interaction) {
         const sub = interaction.options.getSubcommand();
         const userId = interaction.user.id;
-        const guildId = interaction.guild.id;
-
-        // Protocol: All command confirmations are now persistent (ephemeral: false)
         await interaction.deferReply({ ephemeral: false });
 
         const userConf = await UserConfig.findOne({ userId });
@@ -79,57 +68,53 @@ module.exports = {
 
             const config = await Config.findOne();
             const storageChannel = interaction.client.channels.cache.get(config?.storageChannelId);
-            if (!storageChannel) return interaction.editReply('Master, the storage room is not set up.');
+            if (!storageChannel) return interaction.editReply('Vault room not setup.');
 
             const sentMsg = await storageChannel.send({ content: `Drop: ${interaction.user.tag}`, files: [image.url] });
             const lastActive = await Item.findOne({ userId, isArchived: false }).sort({ activeSeq: -1 });
             const nextActive = lastActive ? lastActive.activeSeq + 1 : 1;
 
-            const days = Math.round(freq.duration / 86400000);
-            const nextDate = getFutureMidnightIST(days);
-
             const newItem = new Item({
-                userId, guildId, name, imageUrl: sentMsg.attachments.first().url, storageMessageId: sentMsg.id, storageChannelId: storageChannel.id,
-                frequencyName: freq.name, frequencyDuration: freq.duration, nextReminder: nextDate, activeSeq: nextActive
+                userId, name, imageUrl: sentMsg.attachments.first().url, storageMessageId: sentMsg.id, storageChannelId: storageChannel.id,
+                frequencyName: freq.name, frequencyDuration: freq.duration, nextReminder: getFutureMidnightIST(Math.round(freq.duration/86400000)), activeSeq: nextActive
             });
-
             await newItem.save();
-            await updateDashboard(interaction.client, guildId, userId);
-            return interaction.editReply({ content: ai.getAddMessage(name, masterName) });
+            await updateDashboard(interaction.client, userId);
+            const reply = await interaction.editReply({ content: ai.getAddMessage(name, masterName) });
+            setTimeout(() => reply.delete().catch(() => {}), 60000); 
         }
 
         if (sub === 'rename') {
             const itemIdOrName = interaction.options.getString('item');
             const newName = interaction.options.getString('new_name');
-            
             let item = await Item.findById(itemIdOrName) || await Item.findOne({ userId, activeSeq: parseInt(itemIdOrName), isArchived: false }) || await Item.findOne({ userId, archiveSeq: parseInt(itemIdOrName), isArchived: true }) || await Item.findOne({ userId, name: itemIdOrName });
-
-            if (!item) return interaction.editReply({ content: 'I could not find that item in my records.' });
-            
+            if (!item) return interaction.editReply({ content: 'Item not found.' });
             item.name = newName;
             await item.save();
-
-            await updateDashboard(interaction.client, guildId, userId);
-            return interaction.editReply({ content: ai.getRenameMessage(newName, masterName) });
+            await updateDashboard(interaction.client, userId);
+            const reply = await interaction.editReply({ content: ai.getRenameMessage(newName, masterName) });
+            setTimeout(() => reply.delete().catch(() => {}), 60000);
         }
 
         if (sub === 'remove' || sub === 'archive') {
             const itemIdOrName = interaction.options.getString('item');
             let item = await Item.findById(itemIdOrName) || await Item.findOne({ userId, activeSeq: parseInt(itemIdOrName), isArchived: false });
-            if (!item) return interaction.editReply({ content: 'I could not find that item.' });
+            if (!item) return interaction.editReply({ content: 'Item not found.' });
 
             if (sub === 'remove') {
                 await Item.findByIdAndDelete(item._id);
-                await interaction.editReply({ content: ai.getRemoveMessage(null, masterName) });
+                const reply = await interaction.editReply({ content: ai.getRemoveMessage(null, masterName) });
+                setTimeout(() => reply.delete().catch(() => {}), 60000);
             } else {
                 item.isArchived = true;
                 item.activeSeq = null;
                 const lastArchive = await Item.findOne({ userId, isArchived: true }).sort({ archiveSeq: -1 });
                 item.archiveSeq = lastArchive ? lastArchive.archiveSeq + 1 : 1;
                 await item.save();
-                await interaction.editReply({ content: ai.getArchiveMessage(item.name, masterName) });
+                const reply = await interaction.editReply({ content: ai.getArchiveMessage(item.name, masterName) });
+                setTimeout(() => reply.delete().catch(() => {}), 60000);
             }
-            await updateDashboard(interaction.client, guildId, userId);
+            await updateDashboard(interaction.client, userId);
         }
     }
 };

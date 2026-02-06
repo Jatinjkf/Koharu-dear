@@ -20,16 +20,14 @@ module.exports = {
                 i.name.toLowerCase().includes(focused.value.toLowerCase()) || 
                 (i.archiveSeq && String(i.archiveSeq).includes(focused.value))
             );
-            await interaction.respond(filtered.map(i => ({ name: `Archive #${i.archiveSeq || 'Old'} - ${i.name}`, value: i._id.toString() })).slice(0, 25));
+            await interaction.respond(filtered.map(i => ({ name: `Archive #${i.archiveSeq || 'Old'} - ${i.name}`, value: i._id.toString() })));
         }
     },
     async execute(interaction) {
         const sub = interaction.options.getSubcommand();
         const userId = interaction.user.id;
-        const guildId = interaction.guild.id;
 
-        // NEW PROTOCOL: Archive List is now persistent (ephemeral: false)
-        await interaction.deferReply({ ephemeral: (sub === 'send-all') }); 
+        await interaction.deferReply({ ephemeral: false });
 
         const userConf = await UserConfig.findOne({ userId });
         const masterName = userConf ? userConf.preferredName : null;
@@ -50,15 +48,15 @@ module.exports = {
             item.isArchived = false;
             item.archiveSeq = null; 
             item.awaitingReview = false;
-            const days = Math.round(item.frequencyDuration / 86400000);
-            item.nextReminder = getFutureMidnightIST(days);
+            item.nextReminder = getFutureMidnightIST(Math.round(item.frequencyDuration / 86400000));
 
             const lastActive = await Item.findOne({ userId, isArchived: false }).sort({ activeSeq: -1 });
             item.activeSeq = lastActive ? lastActive.activeSeq + 1 : 1;
             await item.save();
 
-            await updateDashboard(interaction.client, guildId, userId);
-            return interaction.editReply({ content: ai.getReviveMessage(item.name, masterName) });
+            await updateDashboard(interaction.client, userId);
+            const reply = await interaction.editReply({ content: ai.getReviveMessage(item.name, masterName) });
+            setTimeout(() => reply.delete().catch(() => {}), 60000);
         }
 
         if (sub === 'send-all') {
@@ -78,7 +76,8 @@ module.exports = {
                 }
                 await new Promise(r => setTimeout(r, 2000)); 
             }
-            return interaction.followUp({ content: "I have delivered all your archives, Master. 🙇‍♀️", ephemeral: true });
+            const finalReply = await interaction.followUp({ content: "I have delivered all your archives, Master. 🙇‍♀️", ephemeral: false });
+            setTimeout(() => finalReply.delete().catch(() => {}), 60000);
         }
     }
 };
