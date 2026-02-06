@@ -21,7 +21,7 @@ module.exports = {
         const masterName = userConfig ? userConfig.preferredName : 'Master';
 
         if (attachments.size > 1) {
-            const reply = await message.reply(`My deepest apologies, ${masterName}. I can only process one study item at a time. Please drop them one by one. 🙇‍♀️`);
+            const reply = await message.reply(`My deepest apologies, ${masterName}. I can only process one study item at a time. 🙇‍♀️`);
             setTimeout(() => {
                 message.delete().catch(() => {});
                 reply.delete().catch(() => {});
@@ -43,7 +43,7 @@ module.exports = {
             });
 
             const lastItem = await Item.findOne({ userId, isArchived: false }).sort({ activeSeq: -1 });
-            const nextSeq = lastItem ? lastItem.activeSeq + 1 : 1;
+            const nextSeq = lastActive ? lastActive.activeSeq + 1 : 1;
             
             const days = Math.round(freq.duration / 86400000);
             const nextDate = getFutureMidnightIST(days);
