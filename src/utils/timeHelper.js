@@ -9,17 +9,17 @@ function getISTDate() {
 
 /**
  * Returns Midnight of a future day in IST.
- * @param {number} daysToAdd Number of days to add from today.
+ * Force-calculates to exactly 00:00:00 IST.
  */
 function getFutureMidnightIST(daysToAdd = 0) {
-    // 1. Get today in IST
+    // 1. Get Today in IST
     let dt = DateTime.now().setZone('Asia/Kolkata');
     
-    // 2. Add days
-    dt = dt.plus({ days: daysToAdd });
+    // 2. Add days and snap to start of day (00:00:00 IST)
+    dt = dt.plus({ days: daysToAdd }).startOf('day');
     
-    // 3. Snap to 00:00:00
-    return dt.startOf('day').toJSDate();
+    // 3. Convert to JS Date ensuring we don't drift back to UTC in a confusing way
+    return new Date(dt.toMillis());
 }
 
 module.exports = { getISTDate, getFutureMidnightIST };

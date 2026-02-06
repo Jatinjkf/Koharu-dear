@@ -10,16 +10,18 @@ const { getISTDate } = require('./timeHelper');
 let scheduledTask = null;
 
 async function checkReminders(client) {
-    console.log(`[Scheduler] Midnight Review IST: ${getISTDate().toFormat('yyyy-MM-dd')}`);
+    const istNow = getISTDate();
+    console.log(`[Scheduler] Checking IST: ${istNow.toFormat('yyyy-MM-dd HH:mm:ss')}`);
+    
     try {
-        const now = getISTDate().toJSDate();
+        const nowMS = istNow.toMillis();
         
-        // Anti-Deadlock (24h safety)
-        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        await Item.updateMany({ awaitingReview: true, nextReminder: { $lte: yesterday } }, { awaitingReview: false });
+        // Anti-Deadlock
+        const yesterdayMS = nowMS - (24 * 60 * 60 * 1000);
+        await Item.updateMany({ awaitingReview: true, nextReminder: { $lte: new Date(yesterdayMS) } }, { awaitingReview: false });
 
         // Find items due ON or BEFORE now
-        const dueItems = await Item.find({ nextReminder: { $lte: now }, isArchived: false, awaitingReview: false });
+        const dueItems = await Item.find({ nextReminder: { $lte: new Date(nowMS) }, isArchived: false, awaitingReview: false });
         if (dueItems.length === 0) {
             console.log("[Scheduler] No items due for this cycle.");
             return;
